@@ -64,6 +64,7 @@ Share the link with your team. They sign in with the email and password you crea
 - Invoice / Quotation toggle, with team-wide automatic numbering (editable)
 - Several service lines with quantity and price
 - Discount, paid amount and previous credit; amount in words (AED / Fils)
+- Optional 5% VAT on quotations (invoices have no VAT line)
 - **PAID** stamp and company stamp (can be turned off)
 - Shared document list, updated live; shows who saved each document last
 - Warnings if the number is already used, or if a teammate changed the same document after you opened it

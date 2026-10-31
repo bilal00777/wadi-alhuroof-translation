@@ -25,6 +25,8 @@ import * as backend from './firebase.js';
   };
 
   // Last number used; the next document gets +1. Change to match your records.
+  const VAT_RATE = 0.05;   // 5% UAE VAT (quotations only, optional)
+
   const COUNTER_START = { invoice: 1330, quotation: 2035761 };
 
   const NOTES = {
@@ -155,6 +157,7 @@ import * as backend from './firebase.js';
       bank: { ...DEFAULT_BANK },
       showStamp: true,
       showPaid: false,
+      vat: false,
       baseUpdatedAt: 0
     };
   }
@@ -162,8 +165,10 @@ import * as backend from './firebase.js';
   function totals(s) {
     const subtotal = s.items.reduce((sum, it) => sum + num(it.qty) * num(it.price), 0);
     const net = Math.max(0, subtotal - num(s.discount));
-    const due = s.type === 'invoice' ? net - num(s.paid) - num(s.credit) : net;
-    return { subtotal, net, due };
+    const vat = s.type === 'quotation' && s.vat ? Math.round(net * VAT_RATE * 100) / 100 : 0;
+    const total = net + vat;                       // amount in words uses this
+    const due = s.type === 'invoice' ? net - num(s.paid) - num(s.credit) : total;
+    return { subtotal, net, vat, total, due };
   }
 
   /* ---------- Preview rendering ---------- */
@@ -196,7 +201,8 @@ import * as backend from './firebase.js';
          <div class="due"><span>TOTAL DUE (AED)</span><b>${money(t.due)}</b></div>`
       : `<div class="row"><span>Subtotal</span><b>${money(t.subtotal)}</b></div>
          <div class="row"><span>Discount</span><b>${money(num(s.discount))}</b></div>
-         <div class="due"><span>TOTAL (AED)</span><b>${money(t.due)}</b></div>`;
+         ${s.vat ? `<div class="row"><span>VAT (${VAT_RATE * 100}%)</span><b>${money(t.vat)}</b></div>` : ''}
+         <div class="due"><span>${s.vat ? 'TOTAL INCL. VAT (AED)' : 'TOTAL (AED)'}</span><b>${money(t.due)}</b></div>`;
 
     const b = s.bank;
     $('#sheet').innerHTML = `
@@ -254,7 +260,7 @@ import * as backend from './firebase.js';
 
       <section class="words">
         <h3>Amount in words</h3>
-        <p>${amountWords(t.net)}</p>
+        <p>${amountWords(t.total)}</p>
       </section>
 
       ${s.notes ? `<p class="notes">${esc(s.notes)}</p>` : ''}

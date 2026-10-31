@@ -151,6 +151,7 @@ input:focus, textarea:focus { border-color: var(--purple-2); }
 
 /* Mode specific */
 body[data-type="quotation"] .only-invoice { display: none !important; }
+body[data-type="invoice"] .only-quotation { display: none !important; }
 
 /* ---------- Preview ---------- */
 .preview { min-width: 0; }
