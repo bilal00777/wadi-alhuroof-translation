@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Paste this into: Firebase console -> Firestore Database -> Rules -> Publish
+// Replace the example emails with your team's emails (all lowercase).
+// Anyone not on this list is refused by the database, even if they find the website.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTeam() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'owner@yourcompany.com',
+          'colleague1@yourcompany.com',
+          'colleague2@yourcompany.com'
+        ];
+    }
+
+    match /documents/{docId} {
+      allow read, write: if isTeam();
+    }
+
+    match /meta/{docId} {
+      allow read, write: if isTeam();
+    }
+  }
+}

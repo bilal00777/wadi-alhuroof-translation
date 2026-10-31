@@ -94,7 +94,7 @@ body {
 
 .field { display: block; margin-bottom: 10px; }
 .field > span { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .4px; }
-input[type="text"], input[type="number"], input[type="date"], textarea {
+input[type="text"], input[type="number"], input[type="date"], input[type="email"], input[type="password"], textarea {
   width: 100%;
   font: inherit; font-size: 14px;
   padding: 8px 10px;
@@ -255,12 +255,37 @@ table.items tbody tr:nth-child(even) td { background: var(--grey); }
   .layout { grid-template-columns: 1fr; padding: 12px; }
   .topbar { padding: 10px 12px; }
   .brand span { display: none; }
+  .user { display: none; }
 }
 @media (max-width: 480px) {
   .grid3 { grid-template-columns: 1fr 1fr; }
   .item-row { grid-template-columns: 1fr 1fr auto; }
   .item-row label:nth-of-type(2) { grid-column: 1 / -1; }
 }
+
+/* ---------- Sign-in gate ---------- */
+.gate {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: linear-gradient(160deg, var(--purple) 0%, #2a0638 100%);
+}
+.gate[hidden], body:not(.locked) .gate { display: none; }
+.gate-card { width: 100%; max-width: 380px; background: #fff; border-radius: 14px; padding: 30px 28px; box-shadow: 0 20px 60px rgba(0,0,0,.35); text-align: center; }
+.gate-logo { width: 72px; height: 72px; border-radius: 50%; }
+.gate-card h1 { margin: 10px 0 2px; font-size: 20px; color: var(--purple); }
+.gate-sub { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
+.gate-card form { text-align: left; }
+.gate-msg { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.gate-error { color: var(--danger); font-size: 13px; min-height: 18px; margin: 8px 0 0; text-align: center; }
+.gate-card code { background: var(--light); padding: 1px 5px; border-radius: 4px; }
+.btn.solid { width: 100%; background: var(--purple); color: #fff; border-color: var(--purple); padding: 11px; font-size: 14px; margin-top: 4px; }
+.btn.solid:hover { background: var(--purple-2); }
+.btn.solid:disabled { opacity: .6; cursor: wait; }
+.link { display: block; margin: 8px auto 0; border: 0; background: none; color: var(--purple); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
+body.locked .layout, body.locked .top-actions { display: none; }
+.user { font-size: 12px; opacity: .85; align-self: center; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history .by { color: var(--muted); font-size: 10.5px; display: block; }
 
 /* ---------- Print ---------- */
 @page { size: A4; margin: 0; }

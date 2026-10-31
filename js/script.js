@@ -1,8 +1,10 @@
 /* ==========================================================
    Wadi Alhuroof – Invoice & Quotation Generator
-   Plain JavaScript, no dependencies. Data is kept in the
-   browser (localStorage), so it works on GitHub Pages.
+   Plain JavaScript. Team sign-in and shared storage come from
+   Firebase (see js/firebase.js). Works on GitHub Pages.
    ========================================================== */
+import * as backend from './firebase.js';
+
 (() => {
   'use strict';
 
@@ -35,9 +37,7 @@
   };
 
   const KEYS = {
-    docs: 'wadi-docs-v1',
-    counters: 'wadi-counters-v1',
-    draft: 'wadi-draft-v1'
+    draft: 'wadi-draft-v2'   // unsaved work, kept per user on this device only
   };
 
   /* ---------- Helpers ---------- */
@@ -114,22 +114,25 @@
     return `${words(dirhams)} DHS AND ${words(fils)} FILS`;
   }
 
+  /* ---------- Session & shared data ---------- */
+  let currentUser = null;
+  let cloudDocs = [];
+  let cloudCounters = {};
+  let unsubs = [];
+  let gateMessage = '';
+  const warned = {};
+
+  const draftKey = () => `${KEYS.draft}-${currentUser ? currentUser.uid : 'anon'}`;
+  const nameOf = (email) => String(email || '').split('@')[0] || 'someone';
+
   /* ---------- Numbering ---------- */
-  const counters = () => Object.assign({}, COUNTER_START, read(KEYS.counters, {}));
+  const counters = () => Object.assign({}, COUNTER_START, cloudCounters);
 
   function formatNumber(type, n) {
     if (type === 'quotation') return `WDH/${new Date().getFullYear()}/${n}`;
     return String(n);
   }
-  const nextNumber = (type) => formatNumber(type, counters()[type] + 1);
-
-  function registerNumber(type, number) {
-    const m = String(number).match(/(\d+)\s*$/);
-    if (!m) return;
-    const n = parseInt(m[1], 10);
-    const c = counters();
-    if (n > c[type]) { c[type] = n; write(KEYS.counters, c); }
-  }
+  const nextNumber = (type) => formatNumber(type, Number(counters()[type]) + 1);
 
   /* ---------- State ---------- */
   let state;
@@ -151,7 +154,8 @@
       notes: NOTES[type],
       bank: { ...DEFAULT_BANK },
       showStamp: true,
-      showPaid: false
+      showPaid: false,
+      baseUpdatedAt: 0
     };
   }
 
@@ -274,6 +278,7 @@
     const holder = $('#sheetHolder');
     const sheet = $('#sheet');
     const avail = holder.parentElement.clientWidth;
+    if (!avail) return;               // page is hidden (signed out)
     const scale = Math.min(1, avail / 794);
     sheet.style.transform = `scale(${scale})`;
     holder.style.width = `${794 * scale}px`;
@@ -340,7 +345,7 @@
 
   function changed() {
     renderSheet();
-    write(KEYS.draft, state);
+    if (currentUser) write(draftKey(), state);
   }
 
   /* ---------- Switch type ---------- */
@@ -355,31 +360,85 @@
     changed();
   }
 
-  /* ---------- Saved documents ---------- */
+  /* ---------- Errors ---------- */
+  function friendlyError(e) {
+    const code = (e && (e.code || e.message)) || '';
+    if (/invalid-credential|wrong-password|user-not-found|invalid-email|missing-password/.test(code)) return 'Wrong email or password.';
+    if (/too-many-requests/.test(code)) return 'Too many attempts. Please wait a few minutes or reset your password.';
+    if (/network|unavailable/.test(code)) return 'No internet connection. Please try again.';
+    if (/permission-denied/.test(code)) return 'Access denied. Your email is not on the team list.';
+    return 'Something went wrong. Please try again.';
+  }
+
+  function onDataError(e) {
+    if (/permission-denied/.test((e && (e.code || e.message)) || '')) {
+      gateMessage = 'Access denied. Your email is not on the team list.';
+      backend.logOut().catch(() => {});
+    } else {
+      toast(friendlyError(e));
+    }
+  }
+
+  /* ---------- Saved documents (shared with the team) ---------- */
   let filter = 'all';
+  const kindName = (type) => (type === 'invoice' ? 'Invoice' : 'Quotation');
 
-  const getDocs = () => read(KEYS.docs, []);
+  // If this document is still on "auto number", follow the team counter.
+  function refreshAutoNumber() {
+    if (!state || !state.numberAuto || cloudDocs.some((d) => d.id === state.id)) return;
+    const n = nextNumber(state.type);
+    if (n !== state.number) {
+      state.number = n;
+      const input = $('#number');
+      if (input) input.value = n;
+      changed();
+    }
+  }
 
-  function saveDoc() {
+  // Tell the user if a teammate saved the document that is currently open.
+  function checkRemoteChange() {
+    const remote = cloudDocs.find((d) => d.id === state.id);
+    if (!remote || !currentUser) return;
+    if (remote.updatedAt > (state.baseUpdatedAt || 0) && remote.updatedBy !== currentUser.email && !warned[remote.updatedAt]) {
+      warned[remote.updatedAt] = true;
+      toast(`${nameOf(remote.updatedBy)} saved changes to this document. Re-open it from the list to see them.`);
+    }
+  }
+
+  async function saveDoc() {
+    if (!currentUser) return;
     if (!state.customer.trim()) {
       toast('Please enter the customer name before saving.');
       $('#customer').focus();
       return;
     }
-    const docs = getDocs();
-    const copy = JSON.parse(JSON.stringify(state));
-    copy.updatedAt = Date.now();
-    const idx = docs.findIndex((d) => d.id === copy.id);
-    if (idx >= 0) docs[idx] = copy; else docs.push(copy);
-    if (!write(KEYS.docs, docs)) { toast('Could not save – browser storage is full or blocked.'); return; }
-    registerNumber(state.type, state.number);
-    renderHistory();
-    toast(`${state.type === 'invoice' ? 'Invoice' : 'Quotation'} ${state.number} saved.`);
+    const dup = cloudDocs.find((d) => d.id !== state.id && d.type === state.type && String(d.number) === String(state.number));
+    if (dup && !confirm(`${kindName(state.type)} number ${state.number} is already used for ${dup.customer || 'another customer'}.\n\nSave anyway?`)) return;
+
+    const remote = cloudDocs.find((d) => d.id === state.id);
+    if (remote && remote.updatedAt > (state.baseUpdatedAt || 0) && remote.updatedBy !== currentUser.email &&
+        !confirm(`${remote.updatedBy} saved changes to this document after you opened it.\n\nOverwrite their changes?`)) return;
+
+    const btn = $('#btnSave');
+    btn.disabled = true;
+    try {
+      const saved = await backend.saveDoc(state, currentUser.email);
+      state.baseUpdatedAt = saved.updatedAt;
+      state.createdBy = saved.createdBy;
+      write(draftKey(), state);
+      const m = String(state.number).match(/(\d+)\s*$/);
+      if (m) backend.bumpCounter(state.type, parseInt(m[1], 10)).catch(() => {});
+      toast(`${kindName(state.type)} ${state.number} saved.`);
+    } catch (e) {
+      toast(friendlyError(e));
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function renderHistory() {
     const list = $('#history');
-    const docs = getDocs()
+    const docs = cloudDocs
       .filter((d) => filter === 'all' || d.type === filter)
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
@@ -392,6 +451,7 @@
         <div class="info" data-load tabindex="0" role="button">
           <b>${esc(d.customer || 'No name')}</b>
           <small><span class="badge ${d.type === 'quotation' ? 'q' : ''}">${d.type === 'invoice' ? 'INV' : 'QUO'}</span> ${esc(d.number)} · ${esc(dmy(d.date))}</small>
+          <small class="by">Saved by ${esc(nameOf(d.updatedBy))}</small>
         </div>
         <span class="amt">${money(totals(d).due)}</span>
         <button type="button" class="del" data-del title="Delete" aria-label="Delete">&times;</button>
@@ -399,10 +459,12 @@
   }
 
   function loadDoc(id) {
-    const d = getDocs().find((x) => x.id === id);
+    const d = cloudDocs.find((x) => x.id === id);
     if (!d) return;
     state = JSON.parse(JSON.stringify(d));
     state.numberAuto = false;
+    state.baseUpdatedAt = d.updatedAt || 0;
+    state.bank = Object.assign({}, DEFAULT_BANK, state.bank);
     fillForm();
     changed();
     renderHistory();
@@ -410,11 +472,10 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function deleteDoc(id) {
-    const d = getDocs().find((x) => x.id === id);
-    if (!d || !confirm(`Delete ${d.type} ${d.number} for ${d.customer || 'No name'}?`)) return;
-    write(KEYS.docs, getDocs().filter((x) => x.id !== id));
-    renderHistory();
+  async function deleteDoc(id) {
+    const d = cloudDocs.find((x) => x.id === id);
+    if (!d || !confirm(`Delete ${d.type} ${d.number} for ${d.customer || 'No name'}?\n\nThis removes it for the whole team.`)) return;
+    try { await backend.removeDoc(id); } catch (e) { toast(friendlyError(e)); }
   }
 
   function newDoc() {
@@ -427,7 +488,7 @@
 
   /* ---------- Backup / restore ---------- */
   function exportAll() {
-    const data = { app: 'wadi-invoice-generator', version: 1, counters: counters(), docs: getDocs() };
+    const data = { app: 'wadi-invoice-generator', version: 2, counters: counters(), docs: cloudDocs };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -440,23 +501,19 @@
 
   function importAll(file) {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const data = JSON.parse(reader.result);
         if (!data || !Array.isArray(data.docs)) throw new Error('bad file');
-        const docs = getDocs();
-        let added = 0;
-        data.docs.forEach((d) => {
-          if (d && d.id && !docs.some((x) => x.id === d.id)) { docs.push(d); added++; }
+        const missing = data.docs.filter((d) => d && d.id && d.type && Array.isArray(d.items) && !cloudDocs.some((x) => x.id === d.id));
+        for (const d of missing) await backend.saveDoc(d, currentUser.email);
+        const best = {};
+        missing.forEach((d) => {
+          const m = String(d.number).match(/(\d+)\s*$/);
+          if (m) best[d.type] = Math.max(best[d.type] || 0, parseInt(m[1], 10));
         });
-        write(KEYS.docs, docs);
-        if (data.counters) {
-          const c = counters();
-          Object.keys(c).forEach((k) => { if (num(data.counters[k]) > c[k]) c[k] = num(data.counters[k]); });
-          write(KEYS.counters, c);
-        }
-        renderHistory();
-        toast(`Restored ${added} document${added === 1 ? '' : 's'}.`);
+        for (const t of Object.keys(best)) await backend.bumpCounter(t, best[t]);
+        toast(`Restored ${missing.length} document${missing.length === 1 ? '' : 's'}.`);
       } catch (err) {
         toast('That file is not a valid backup.');
       }
@@ -485,15 +542,85 @@
     toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
-  /* ---------- Init ---------- */
-  function init() {
-    const draft = read(KEYS.draft, null);
-    state = draft && Array.isArray(draft.items) ? Object.assign(newState(draft.type || 'invoice'), draft) : newState('invoice');
+  /* ---------- Sign in / out ---------- */
+  function showGate(mode) {
+    $('#gateLoading').hidden = mode !== 'loading';
+    $('#loginForm').hidden = mode !== 'login';
+    $('#setupNotice').hidden = mode !== 'setup';
+  }
+
+  function onSignedIn(user) {
+    currentUser = user;
+    document.body.classList.remove('locked');
+    $('#userEmail').textContent = user.email;
+    $('#loginPassword').value = '';
+
+    const draft = read(draftKey(), null);
+    state = draft && Array.isArray(draft.items)
+      ? Object.assign(newState(draft.type || 'invoice'), draft)
+      : newState('invoice');
     state.bank = Object.assign({}, DEFAULT_BANK, state.bank);
+
+    unsubs.forEach((f) => f());
+    unsubs = [
+      backend.watchCounters((c) => { cloudCounters = c || {}; refreshAutoNumber(); }, onDataError),
+      backend.watchDocs((list) => { cloudDocs = list; renderHistory(); checkRemoteChange(); }, onDataError)
+    ];
 
     fillForm();
     renderSheet();
     renderHistory();
+    requestAnimationFrame(fitSheet);
+  }
+
+  function onSignedOut() {
+    unsubs.forEach((f) => f());
+    unsubs = [];
+    currentUser = null;
+    cloudDocs = [];
+    cloudCounters = {};
+    document.body.classList.add('locked');
+    $('#userEmail').textContent = '';
+    state = newState('invoice');          // clear everything from screen
+    fillForm();
+    renderSheet();
+    $('#loginError').textContent = gateMessage;
+    gateMessage = '';
+    showGate('login');
+  }
+
+  /* ---------- Init ---------- */
+  function init() {
+    state = newState('invoice');
+    fillForm();
+    renderSheet();
+
+    // Login form
+    $('#loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('#btnLogin');
+      $('#loginError').textContent = '';
+      btn.disabled = true;
+      try {
+        await backend.signIn($('#loginEmail').value, $('#loginPassword').value);
+      } catch (err) {
+        $('#loginError').textContent = friendlyError(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    $('#btnReset').addEventListener('click', async () => {
+      const email = $('#loginEmail').value.trim();
+      const out = $('#loginError');
+      if (!email) { out.textContent = 'Type your email above first.'; return; }
+      try {
+        await backend.resetPassword(email);
+        out.textContent = 'If this email is on the team, a reset link has been sent.';
+      } catch (err) {
+        out.textContent = friendlyError(err);
+      }
+    });
+    $('#btnSignOut').addEventListener('click', () => backend.logOut().catch((e) => toast(friendlyError(e))));
 
     // Form events
     $('.panel').addEventListener('input', (e) => {
@@ -568,16 +695,19 @@
       e.target.value = '';
     });
 
-    // Keyboard shortcut: Ctrl/Cmd + S to save
+    // Ctrl/Cmd + S saves
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveDoc(); }
     });
 
     window.addEventListener('resize', fitSheet);
-    window.addEventListener('beforeprint', () => {
-      $('#sheet').style.transform = 'none';
-    });
+    window.addEventListener('beforeprint', () => { $('#sheet').style.transform = 'none'; });
     window.addEventListener('afterprint', fitSheet);
+
+    // Start: need Firebase settings, then wait for sign-in state
+    if (!backend.configured) { showGate('setup'); return; }
+    showGate('loading');
+    backend.onUser((user) => (user ? onSignedIn(user) : onSignedOut()));
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -8,7 +8,36 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="locked">
+
+  <!-- Team sign-in gate -->
+  <div id="authGate" class="gate no-print">
+    <div class="gate-card">
+      <img src="assets/logo.png" alt="" class="gate-logo">
+      <h1>Wadi Alhuroof</h1>
+      <p class="gate-sub">Invoices &amp; Quotations &ndash; team access only</p>
+
+      <p id="gateLoading" class="gate-msg">Loading&hellip;</p>
+
+      <form id="loginForm" hidden>
+        <label class="field"><span>Email</span>
+          <input type="email" id="loginEmail" autocomplete="username" required>
+        </label>
+        <label class="field"><span>Password</span>
+          <input type="password" id="loginPassword" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn solid" id="btnLogin">Sign in</button>
+        <p id="loginError" class="gate-error" role="alert"></p>
+        <button type="button" class="link" id="btnReset">Forgot password?</button>
+      </form>
+
+      <div id="setupNotice" hidden>
+        <p class="gate-error">This app is not connected to a database yet.</p>
+        <p class="gate-msg">Open <code>js/firebase-config.js</code> and paste your Firebase settings.
+        The README explains every step.</p>
+      </div>
+    </div>
+  </div>
 
   <!-- Top bar -->
   <header class="topbar no-print">
@@ -20,9 +49,11 @@
       </div>
     </div>
     <div class="top-actions">
+      <span class="user" id="userEmail" title="Signed in"></span>
       <button type="button" class="btn ghost" id="btnNew">+ New</button>
       <button type="button" class="btn" id="btnSave">Save</button>
       <button type="button" class="btn primary" id="btnPrint">Print / Save PDF</button>
+      <button type="button" class="btn ghost" id="btnSignOut">Sign out</button>
     </div>
   </header>
 
@@ -129,7 +160,7 @@
           <button type="button" class="tab" data-filter="quotation">Quotations</button>
         </div>
         <ul id="history" class="history"></ul>
-        <p class="hint">Documents are stored in this browser only. Use <b>Backup</b> to keep a copy.</p>
+        <p class="hint">Shared with your team and updated live. <b>Backup</b> downloads a copy to your computer.</p>
       </section>
 
     </aside>
@@ -145,6 +176,6 @@
 
   <div id="toast" class="toast no-print" role="status" aria-live="polite"></div>
 
-  <script src="js/script.js"></script>
+  <script type="module" src="js/script.js"></script>
 </body>
 </html>
