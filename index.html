@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invoice &amp; Quotation Generator | Wadi Alhuroof Translation Services</title>
+  <meta name="description" content="Create, save and print invoices and quotations for Wadi Alhuroof Translation Services.">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Top bar -->
+  <header class="topbar no-print">
+    <div class="brand">
+      <img src="assets/logo.png" alt="" class="brand-logo">
+      <div>
+        <strong>Wadi Alhuroof</strong>
+        <span>Invoice &amp; Quotation Generator</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn ghost" id="btnNew">+ New</button>
+      <button type="button" class="btn" id="btnSave">Save</button>
+      <button type="button" class="btn primary" id="btnPrint">Print / Save PDF</button>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- Editor -->
+    <aside class="panel no-print" aria-label="Document editor">
+
+      <section class="card">
+        <h2>Document</h2>
+        <div class="segmented" role="radiogroup" aria-label="Document type">
+          <label><input type="radio" name="docType" value="invoice" checked><span>Invoice</span></label>
+          <label><input type="radio" name="docType" value="quotation"><span>Quotation</span></label>
+        </div>
+        <div class="grid2">
+          <label class="field">
+            <span>Number</span>
+            <input type="text" id="number" data-k="number">
+          </label>
+          <label class="field">
+            <span>Date</span>
+            <input type="date" id="date" data-k="date">
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Customer</h2>
+        <label class="field">
+          <span>Customer name</span>
+          <input type="text" id="customer" data-k="customer" placeholder="e.g. U.I.D Consultancy LLC" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Address</span>
+          <input type="text" id="address" data-k="address" placeholder="Dubai, UAE" autocomplete="off">
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Services</h2>
+          <button type="button" class="btn small" id="btnAddItem">+ Add line</button>
+        </div>
+        <div id="itemsEditor" class="items-editor"></div>
+      </section>
+
+      <section class="card">
+        <h2>Amounts (AED)</h2>
+        <div class="grid3">
+          <label class="field">
+            <span>Discount</span>
+            <input type="number" min="0" step="0.01" id="discount" data-k="discount" inputmode="decimal">
+          </label>
+          <label class="field only-invoice">
+            <span>Paid</span>
+            <input type="number" min="0" step="0.01" id="paid" data-k="paid" inputmode="decimal">
+          </label>
+          <label class="field only-invoice">
+            <span>Previous credit</span>
+            <input type="number" min="0" step="0.01" id="credit" data-k="credit" inputmode="decimal">
+          </label>
+        </div>
+        <div class="summary-line">
+          <span id="liveLabel">Balance due</span><strong id="liveTotal">0.00</strong>
+        </div>
+        <button type="button" class="btn small only-invoice" id="btnMarkPaid">Mark as fully paid</button>
+      </section>
+
+      <section class="card">
+        <h2>Options</h2>
+        <label class="check only-invoice">
+          <input type="checkbox" id="showPaid" data-k="showPaid">
+          <span>Show <b>PAID</b> stamp</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="showStamp" data-k="showStamp">
+          <span>Show company stamp</span>
+        </label>
+        <label class="field">
+          <span>Notes / terms</span>
+          <textarea id="notes" data-k="notes" rows="3"></textarea>
+        </label>
+        <details class="bank-edit">
+          <summary>Bank details</summary>
+          <label class="field"><span>Account name</span><input type="text" data-k="bank.accName"></label>
+          <label class="field"><span>Account number</span><input type="text" data-k="bank.accNo"></label>
+          <label class="field"><span>IBAN</span><input type="text" data-k="bank.iban"></label>
+          <label class="field"><span>Bank</span><input type="text" data-k="bank.bank"></label>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Saved documents</h2>
+          <div class="mini-actions">
+            <button type="button" class="btn small ghost" id="btnExport">Backup</button>
+            <button type="button" class="btn small ghost" id="btnImport">Restore</button>
+            <input type="file" id="importFile" accept="application/json" hidden>
+          </div>
+        </div>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab active" data-filter="all">All</button>
+          <button type="button" class="tab" data-filter="invoice">Invoices</button>
+          <button type="button" class="tab" data-filter="quotation">Quotations</button>
+        </div>
+        <ul id="history" class="history"></ul>
+        <p class="hint">Documents are stored in this browser only. Use <b>Backup</b> to keep a copy.</p>
+      </section>
+
+    </aside>
+
+    <!-- Live preview -->
+    <section class="preview" aria-label="Preview">
+      <div class="sheet-holder" id="sheetHolder">
+        <article class="sheet" id="sheet"></article>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast no-print" role="status" aria-live="polite"></div>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
